@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoreo de Canecas</title>
+
+<style>
+    :root {
+        --bg-dark: #0b0c10;
+        --card-bg: #15171d;
+        --glass: rgba(255,255,255,0.05);
+        --border: rgba(255,255,255,0.08);
+        --neon-green: #00ff9d;
+        --neon-yellow: #ffd42a;
+        --neon-red: #ff4b4b;
+    }
+
+    body {
+        font-family: "Inter", sans-serif;
+        background: radial-gradient(circle at center, #111318, #0a0b0d);
+        color: #fff;
+        padding: 20px;
+        margin: 0;
+    }
+
+    h1 {
+        text-align: center;
+        margin-bottom: 35px;
+        font-size: 32px;
+        font-weight: 700;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 25px;
+        max-width: 1280px;
+        margin: auto;
+    }
+
+    .card {
+        background: var(--card-bg);
+        padding: 25px;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        backdrop-filter: blur(10px);
+        transition: .3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .card:hover { transform: translateY(-5px); }
+
+    .card h2 { font-size: 24px; margin-bottom: 18px; }
+
+    /* CANECA */
+    .caneca {
+        width: 140px;
+        height: 220px;
+        margin: 0 auto;
+        background: linear-gradient(180deg, #d6d6d6, #9d9d9d 40%, #7a7a7a);
+        border-radius: 70px 70px 45px 45px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: inset 0 0 35px rgba(0,0,0,0.6);
+        animation: float 3s ease-in-out infinite;
+    }
+
+    @media (max-width: 480px) {
+        .caneca {
+            width: 110px;
+            height: 170px;
+        }
+    }
+
+    .nivel {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        height: 0%;
+        border-radius: 0 0 45px 45px;
+        transition: height .8s ease;
+    }
+
+    .info {
+        font-size: 18px;
+        color: #dcdcdc;
+        margin-top: 12px;
+    }
+
+    .timestamp {
+        margin-top: 12px;
+        font-size: 15px;
+        color: #999;
+        text-align: center;
+    }
+
+    /* ORDEN DE RECOLECCIÓN */
+    #ordenRecoleccion {
+        font-size: 30px;
+        color: #ffffff;
+        text-align: center;
+        margin-top: 20px;
+        line-height: 40px;
+        font-weight: 600;
+        text-shadow: 0 0 10px rgba(255,255,255,0.25);
+        padding: 15px;
+        border-radius: 14px;
+        backdrop-filter: blur(8px);
+        background: rgba(255,255,255,0.03);
+    }
+
+    /* ALERTAS */
+    #alertas {
+        text-align: center;
+        font-size: 22px;
+        font-weight: 700;
+        margin-top: 25px;
+        min-height: 40px;
+    }
+
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: .6; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+</style>
+</head>
+
+<body>
+
+<h1>Estado de las 4 Canecas</h1>
+
+<div class="grid" id="contenedorCanecas"></div>
+
+<h2 style="text-align:center; margin-top:40px;">Orden de recolección</h2>
+<p id="ordenRecoleccion">Calculando...</p>
+
+<h2 style="text-align:center; margin-top:40px;">Alertas</h2>
+<div id="alertas">Sin alertas.</div>
+
+<script type="module">
+
+/* ====== FIREBASE ====== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyBNcCk8UpU8ldUJg2w8nOMlBosvH0Ui1yY",
+    authDomain: "conexionlora.firebaseapp.com",
+    databaseURL: "https://conexionlora-default-rtdb.firebaseio.com",
+    projectId: "conexionlora",
+    storageBucket: "conexionlora.appspot.com",
+    messagingSenderId: "879162646075",
+    appId: "1:879162646075:web:2e0821ad5d9460bc18c61e"
+};
+
+const EMAIL = "feliperororodriguez@gmail.com";
+const PASSWORD = "12345678";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+let niveles = {1:0,2:0,3:0,4:0};
+let movidas = {1:false,2:false,3:false,4:false};
+
+/* ====== CREAR TARJETAS ====== */
+const cont = document.getElementById("contenedorCanecas");
+
+for (let i = 1; i <= 4; i++) {
+    cont.innerHTML += `
+        <div class="card">
+            <h2>Caneca ${i}</h2>
+
+            <div class="caneca">
+                <div class="nivel" id="nivel${i}"></div>
+            </div>
+
+            <p class="info">Nivel: <span id="nivel${i}_text">---</span></p>
+            <p class="info">Persona: <span id="persona${i}">---</span></p>
+            <p class="info">Movida: <span id="movida${i}">---</span></p>
+
+            <p class="timestamp" id="timestamp${i}">Última actualización: ---</p>
+        </div>
+    `;
+}
+
+/* ====== CONVERTIR DISTANCIA A PORCENTAJE ====== */
+function convertir(dist) {
+    let max = 40, min = 5;
+    if (dist < min) dist = min;
+    if (dist > max) dist = max;
+    return Math.round(100 - ((dist - min) / (max - min)) * 100);
+}
+
+/* ====== ACTUALIZAR UI ====== */
+function actualizarUI(num, data) {
+    if (!data) return;
+
+    let porc = convertir(data.distanciaNivel ?? 40);
+    niveles[num] = porc;
+    movidas[num] = data.movida ?? false;
+
+    const lvl = document.getElementById(`nivel${num}`);
+    lvl.style.height = porc + "%";
+
+    let color = porc < 50 ? "#00ffbf" :
+                porc < 80 ? "#ffd42a" :
+                            "#ff4b4b";
+    lvl.style.background = color;
+
+    document.getElementById(`nivel${num}_text`).textContent = porc + "%";
+    document.getElementById(`persona${num}`).textContent = data.distanciaPersona ?? "---";
+    document.getElementById(`movida${num}`).textContent = data.movida ? "Sí" : "No";
+
+    /* ====== FORMATEAR TIMESTAMP ====== */
+    if (data.timestamp) {
+        let fecha = new Date(data.timestamp).toLocaleString("es-CO", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
+        });
+
+        document.getElementById(`timestamp${num}`).textContent = "Última actualización: " + fecha;
+    }
+}
+
+/* ====== ORDEN DE RECOLECCIÓN ====== */
+function calcularOrden() {
+    let lista = [];
+
+    for (let i = 1; i <= 4; i++) {
+        if (niveles[i] >= 40) lista.push({ caneca: i, nivel: niveles[i] });
+    }
+
+    lista.sort((a, b) => b.nivel - a.nivel);
+
+    const salida = document.getElementById("ordenRecoleccion");
+
+    if (!lista.length) {
+        salida.textContent = "No hay canecas para recolectar.";
+        return;
+    }
+
+    salida.innerHTML = lista
+        .map((item, index) => `${index + 1}. Caneca ${item.caneca} (${item.nivel}%)`)
+        .join("<br>");
+}
+
+/* ====== ALERTAS ====== */
+function verificarAlertas() {
+    let mensajes = [];
+
+    for (let i = 1; i <= 4; i++) {
+        if (movidas[i]) mensajes.push(`Caneca ${i} está fuera de su lugar. Revisar.`);
+        if (niveles[i] >= 100) mensajes.push(`Caneca ${i} está llena al 100%.`);
+    }
+
+    const alerta = document.getElementById("alertas");
+
+    if (!mensajes.length) {
+        alerta.innerHTML = "Sin alertas.";
+        alerta.style.animation = "none";
+        return;
+    }
+
+    alerta.innerHTML = mensajes.join("<br>");
+    alerta.style.animation = "pulse 1.4s infinite";
+}
+
+/* ====== ESCUCHAR FIREBASE ====== */
+signInWithEmailAndPassword(auth, EMAIL, PASSWORD)
+    .then(() => {
+        const root = ref(db, "innovacion");
+
+        onValue(root, snapshot => {
+            let data = snapshot.val();
+            if (!data) return;
+
+            for (let i = 1; i <= 4; i++) {
+                actualizarUI(i, data["caneca" + i]);
+            }
+
+            calcularOrden();
+            verificarAlertas();
+        });
+    });
+
+</script>
+</body>
+</html>
