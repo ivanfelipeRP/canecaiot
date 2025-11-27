@@ -141,7 +141,6 @@
 <div id="alertas">Sin alertas.</div>
 
 <script type="module">
-
 /* ====== FIREBASE ====== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -165,7 +164,7 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 
 let niveles = {1:0,2:0,3:0,4:0};
-let movidas = {1:false,2:false,3:false,4:false};
+let movidas = {1:false,2:false,3:false,4:false}; // true = en su puesto
 
 /* ====== CREAR TARJETAS ====== */
 const cont = document.getElementById("contenedorCanecas");
@@ -181,7 +180,7 @@ for (let i = 1; i <= 4; i++) {
 
             <p class="info">Nivel: <span id="nivel${i}_text">---</span></p>
             <p class="info">Persona: <span id="persona${i}">---</span></p>
-            <p class="info">Movida: <span id="movida${i}">---</span></p>
+            <p class="info">En su lugar: <span id="movida${i}">---</span></p>
 
             <p class="timestamp" id="timestamp${i}">Última actualización: ---</p>
         </div>
@@ -202,6 +201,8 @@ function actualizarUI(num, data) {
 
     let porc = convertir(data.distanciaNivel ?? 40);
     niveles[num] = porc;
+
+    // true = en su lugar, false = fuera de su lugar
     movidas[num] = data.movida ?? false;
 
     const lvl = document.getElementById(`nivel${num}`);
@@ -258,8 +259,13 @@ function verificarAlertas() {
     let mensajes = [];
 
     for (let i = 1; i <= 4; i++) {
-        if (movidas[i]) mensajes.push(`Caneca ${i} está fuera de su lugar. Revisar.`);
-        if (niveles[i] >= 100) mensajes.push(`Caneca ${i} está llena al 100%.`);
+        // Ahora: true = en su lugar, alertar cuando esté en false
+        if (!movidas[i]) {
+            mensajes.push(`Caneca ${i} está fuera de su lugar. Revisar.`);
+        }
+        if (niveles[i] >= 100) {
+            mensajes.push(`Caneca ${i} está llena al 100%.`);
+        }
     }
 
     const alerta = document.getElementById("alertas");
